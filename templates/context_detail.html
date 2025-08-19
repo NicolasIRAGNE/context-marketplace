@@ -1,0 +1,683 @@
+{% extends "base.html" %}
+
+{% block title %}{{ context.name }} - Context Marketplace{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <div class="flex justify-between items-start mb-8">
+        <div class="flex-1">
+            <div class="flex items-center gap-3 mb-2">
+                <h1 class="text-3xl font-bold">{{ context.name }}</h1>
+                {% if can_edit %}
+                <span class="badge-new">Your Context</span>
+                {% endif %}
+            </div>
+            
+            {% if context.description %}
+            <p class="text-gray-600 mb-4">{{ context.description }}</p>
+            {% endif %}
+            
+            <div class="flex items-center gap-6 text-sm text-gray-500">
+                <span>Created by @{{ context.owner_login }}</span>
+                <span>{{ context.files|length }} files</span>
+                <span>Created {{ context.created_at.strftime('%B %d, %Y') }}</span>
+                {% if context.updated_at != context.created_at %}
+                <span>Updated {{ context.updated_at.strftime('%B %d, %Y') }}</span>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="flex gap-3">
+            {% if can_edit %}
+            <a href="/contexts/{{ context.id }}/edit" class="bg-[#FCA847] text-gray-900 px-6 py-2 font-bold border-[3px] border-gray-900 shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all">
+                Edit Context
+            </a>
+            {% endif %}
+            <button id="copy-btn" class="btn-github">
+                Copy All Files
+            </button>
+            {% if context.github_repo %}
+            <button id="create-pr-btn" class="bg-green-600 text-white px-6 py-2 font-bold border-[3px] border-gray-900 shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all">
+                Create PR
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- GitHub Repo Info -->
+    {% if context.github_repo %}
+    <div class="bg-white card-shadow p-6 mb-8">
+        <div class="flex items-center gap-3 mb-3">
+            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+            </svg>
+            <h2 class="text-xl font-bold">Connected Repository</h2>
+        </div>
+        
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="font-medium">{{ context.github_repo.full_name }}</h3>
+                {% if context.github_repo.description %}
+                <p class="text-gray-600 text-sm">{{ context.github_repo.description }}</p>
+                {% endif %}
+                
+                {% if context.github_repo.languages %}
+                <div class="flex gap-2 mt-3">
+                    {% for lang, bytes in context.github_repo.languages.items() %}
+                    {% set percentage = (bytes / context.github_repo.languages.values()|sum * 100)|round(1) %}
+                    <span class="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded">{{ lang }} {{ percentage }}%</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            
+            <a href="{{ context.github_repo.url }}" target="_blank" class="text-blue-600 hover:text-blue-800 font-medium">
+                View on GitHub →
+            </a>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Contributors -->
+    {% if context.contributors and can_edit %}
+    <div class="bg-white card-shadow p-6 mb-8">
+        <h2 class="text-xl font-bold mb-4">Contributors</h2>
+        <p class="text-gray-600 text-sm mb-4">Select contributors to include in the people.md file</p>
+        
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for contrib in context.contributors %}
+            <div class="flex items-start gap-3 p-3 border rounded-lg">
+                <img src="{{ contrib.avatar_url }}" alt="{{ contrib.login }}" class="w-10 h-10 rounded-full">
+                <div class="flex-1">
+                    <p class="font-medium">{{ contrib.name or contrib.login }}</p>
+                    {% if contrib.pronouns %}
+                    <p class="text-xs text-gray-600">{{ contrib.pronouns }}</p>
+                    {% endif %}
+                    {% if contrib.bio %}
+                    <p class="text-xs text-gray-600 mt-1">{{ contrib.bio }}</p>
+                    {% endif %}
+                    <div class="flex flex-wrap gap-2 mt-1">
+                        {% if contrib.company %}
+                        <span class="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">🏢 {{ contrib.company }}</span>
+                        {% endif %}
+                        {% if contrib.location %}
+                        <span class="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded">📍 {{ contrib.location }}</span>
+                        {% endif %}
+                        {% if contrib.twitter_username %}
+                        <span class="text-xs bg-sky-50 text-sky-700 px-2 py-0.5 rounded">🐦 @{{ contrib.twitter_username }}</span>
+                        {% endif %}
+                        {% if contrib.followers is not none and contrib.followers > 0 %}
+                        <span class="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded">👥 {{ contrib.followers }} followers</span>
+                        {% endif %}
+                        {% if contrib.public_repos is not none and contrib.public_repos > 0 %}
+                        <span class="text-xs bg-orange-50 text-orange-700 px-2 py-0.5 rounded">📦 {{ contrib.public_repos }} repos</span>
+                        {% endif %}
+                        {% if contrib.hireable %}
+                        <span class="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded">💼 Available for hire</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <input
+                    type="checkbox"
+                    {% if contrib.selected %}checked{% endif %}
+                    class="contributor-checkbox h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    data-login="{{ contrib.login }}"
+                >
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Files -->
+    <div class="bg-white card-shadow p-6">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold">Context Files</h2>
+            {% if can_edit %}
+            <button id="add-file-btn" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                Add File
+            </button>
+            {% endif %}
+        </div>
+        
+        <div class="space-y-4">
+            {% for file in context.files %}
+            <div class="file-item border rounded-lg" data-filename="{{ file.name }}">
+                <div class="flex justify-between items-center p-4 bg-gray-50 border-b">
+                    <div class="flex items-center gap-3">
+                        <span class="font-medium">{{ file.name }}</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <button class="copy-file-btn text-blue-600 hover:text-blue-800 text-sm">
+                            Copy
+                        </button>
+                        {% if can_edit %}
+                        <button class="edit-file-btn text-green-600 hover:text-green-800 text-sm" data-filename="{{ file.name }}">
+                            Edit
+                        </button>
+                        <button class="delete-file-btn text-red-600 hover:text-red-800 text-sm" data-filename="{{ file.name }}">
+                            Delete
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="p-4">
+                    {% if file.name.endswith('.md') %}
+                    <div class="markdown-content bg-white p-4 rounded border">
+                        <div class="markdown-rendered" data-content="{{ file.content|e }}">
+                            <!-- Fallback content in case JS fails -->
+                            <pre class="fallback-content bg-gray-50 p-4 rounded text-sm">{{ file.content }}</pre>
+                        </div>
+                    </div>
+                    {% else %}
+                    <pre class="bg-gray-50 p-4 rounded text-sm overflow-x-auto whitespace-pre-wrap"><code class="language-{{ file.name.split('.')[-1] if '.' in file.name else 'text' }}">{{ file.content }}</code></pre>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit File Modal -->
+{% if can_edit %}
+<div id="file-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-6 border-b">
+                <h3 id="modal-title" class="text-lg font-semibold">Add File</h3>
+            </div>
+            <div class="p-6">
+                <form id="file-form">
+                    <div class="mb-4">
+                        <label for="file-name" class="block text-sm font-medium text-gray-700 mb-2">File Name</label>
+                        <input type="text" id="file-name" name="name" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="mb-6">
+                        <label for="file-content" class="block text-sm font-medium text-gray-700 mb-2">Content</label>
+                        <textarea id="file-content" name="content" rows="20" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"></textarea>
+                    </div>
+                    <div class="flex gap-3">
+                        <button type="submit" class="btn-github flex-1">Save File</button>
+                        <button type="button" id="cancel-btn" class="flex-1 bg-gray-200 text-gray-800 px-6 py-3 font-bold border-[3px] border-gray-900 shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+// Copy functionality
+document.getElementById('copy-btn').addEventListener('click', () => {
+    // Safely get all file contents from the DOM instead of template
+    const fileItems = document.querySelectorAll('.file-item');
+    const allContent = Array.from(fileItems).map(item => {
+        const filename = item.dataset.filename;
+        
+        // Try to get content from markdown element first
+        const markdownElement = item.querySelector('.markdown-rendered');
+        if (markdownElement) {
+            const content = markdownElement.getAttribute('data-content') || '';
+            // Decode HTML entities
+            const textArea = document.createElement('textarea');
+            textArea.innerHTML = content;
+            return `File: ${filename}\n${textArea.value}`;
+        }
+        
+        // Fallback to pre/code element
+        const preElement = item.querySelector('pre');
+        const codeElement = item.querySelector('code');
+        if (preElement) {
+            return `File: ${filename}\n${preElement.textContent || ''}`;
+        } else if (codeElement) {
+            return `File: ${filename}\n${codeElement.textContent || ''}`;
+        }
+        return `File: ${filename}\n(no content)`;
+    }).join('\n\n---\n\n');
+    
+    navigator.clipboard.writeText(allContent).then(() => {
+        alert('All files copied to clipboard!');
+    });
+});
+
+document.querySelectorAll('.copy-file-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        // Get content from the file item instead of data attribute
+        const fileItem = btn.closest('.file-item');
+        let content = '';
+        
+        if (fileItem) {
+            // Try to get content from markdown element first
+            const markdownElement = fileItem.querySelector('.markdown-rendered');
+            if (markdownElement) {
+                content = markdownElement.getAttribute('data-content') || '';
+                // Decode HTML entities
+                const textArea = document.createElement('textarea');
+                textArea.innerHTML = content;
+                content = textArea.value;
+            } else {
+                // Fallback to pre/code element
+                const preElement = fileItem.querySelector('pre');
+                const codeElement = fileItem.querySelector('code');
+                if (preElement) {
+                    content = preElement.textContent || '';
+                } else if (codeElement) {
+                    content = codeElement.textContent || '';
+                }
+            }
+        }
+        
+        navigator.clipboard.writeText(content).then(() => {
+            btn.textContent = 'Copied!';
+            setTimeout(() => btn.textContent = 'Copy', 2000);
+        });
+    });
+});
+
+// Create PR functionality
+{% if context.github_repo %}
+document.getElementById('create-pr-btn').addEventListener('click', async () => {
+    const button = document.getElementById('create-pr-btn');
+    const originalText = button.textContent;
+    
+    try {
+        button.textContent = 'Creating PR...';
+        button.disabled = true;
+        
+        const response = await fetch(`/api/contexts/{{ context.id }}/create-pr`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            alert('Pull request created successfully!');
+            window.open(data.pr_url, '_blank');
+        } else {
+            const error = await response.json();
+            alert(`Error creating PR: ${error.detail}`);
+        }
+    } catch (error) {
+        console.error('Error creating PR:', error);
+        alert('Error creating pull request. Please try again.');
+    } finally {
+        button.textContent = originalText;
+        button.disabled = false;
+    }
+});
+{% endif %}
+
+{% if can_edit %}
+// Initialize all event listeners when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    initializeFileManagement();
+    initializeContributorToggles();
+});
+
+function initializeContributorToggles() {
+    document.querySelectorAll('.contributor-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', async (e) => {
+        const login = e.target.dataset.login;
+        try {
+            const response = await fetch(`/api/contexts/{{ context.id }}/contributors/${login}/toggle`, {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Update the people.md file content in real-time
+                const peopleFileItem = document.querySelector('[data-filename="people.md"]');
+                if (peopleFileItem && data.updated_file) {
+                    // Check if it's a markdown file
+                    const markdownElement = peopleFileItem.querySelector('.markdown-rendered');
+                    const preElement = peopleFileItem.querySelector('pre');
+                    
+                    if (markdownElement) {
+                        // Update markdown content
+                        try {
+                            markdownElement.setAttribute('data-content', data.updated_file.content);
+                            if (typeof marked !== 'undefined') {
+                                markdownElement.innerHTML = marked(data.updated_file.content);
+                                if (typeof Prism !== 'undefined') {
+                                    Prism.highlightAll();
+                                }
+                            } else {
+                                markdownElement.innerHTML = '<pre>' + data.updated_file.content + '</pre>';
+                            }
+                        } catch (e) {
+                            console.error('Error updating markdown:', e);
+                            markdownElement.innerHTML = '<pre>' + data.updated_file.content + '</pre>';
+                        }
+                    } else if (preElement) {
+                        // Update plain text content
+                        preElement.textContent = data.updated_file.content;
+                    }
+                }
+                
+                // Optional: Show a success message
+                showNotification(`${data.contributor_selected ? 'Added' : 'Removed'} ${login} ${data.contributor_selected ? 'to' : 'from'} people.md`, 'success');
+            } else {
+                throw new Error('Failed to toggle contributor');
+            }
+        } catch (error) {
+            console.error('Error toggling contributor:', error);
+            e.target.checked = !e.target.checked; // Revert on error
+            showNotification('Error updating contributor. Please try again.', 'error');
+        }
+        });
+    });
+}
+
+function showNotification(message, type) {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 px-4 py-2 rounded-md shadow-lg z-50 ${
+        type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+    }`;
+    notification.textContent = message;
+    
+    // Add to page
+    document.body.appendChild(notification);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notification.remove();
+    }, 3000);
+}
+
+function initializeFileManagement() {
+    const modal = document.getElementById('file-modal');
+    const form = document.getElementById('file-form');
+    const modalTitle = document.getElementById('modal-title');
+    let isEditing = false;
+    let editingFilename = null;
+
+    console.log('Initializing file management...', { modal, form, modalTitle });
+
+    if (!modal || !form || !modalTitle) {
+        console.error('Required elements not found for file management');
+        return;
+    }
+
+    const addFileBtn = document.getElementById('add-file-btn');
+    if (addFileBtn) {
+        addFileBtn.addEventListener('click', () => {
+            isEditing = false;
+            editingFilename = null;
+            modalTitle.textContent = 'Add File';
+            form.reset();
+            modal.classList.remove('hidden');
+        });
+    }
+
+    const cancelBtn = document.getElementById('cancel-btn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+    }
+
+    document.querySelectorAll('.edit-file-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            console.log('Edit button clicked for:', btn.dataset.filename);
+            isEditing = true;
+            editingFilename = btn.dataset.filename;
+            modalTitle.textContent = 'Edit File';
+            
+            // Find the file content - check both markdown and pre elements
+            const fileItem = btn.closest('.file-item');
+            let content = '';
+            
+            if (!fileItem) {
+                console.error('Could not find file item');
+                return;
+            }
+            
+            // Try to get content from markdown element first
+            const markdownElement = fileItem.querySelector('.markdown-rendered');
+            if (markdownElement) {
+                content = markdownElement.getAttribute('data-content') || '';
+                // Decode HTML entities
+                const textArea = document.createElement('textarea');
+                textArea.innerHTML = content;
+                content = textArea.value;
+                console.log('Got content from markdown element:', content.substring(0, 100));
+            } else {
+                // Fallback to pre element or code element
+                const preElement = fileItem.querySelector('pre');
+                const codeElement = fileItem.querySelector('code');
+                if (preElement) {
+                    content = preElement.textContent || '';
+                    console.log('Got content from pre element:', content.substring(0, 100));
+                } else if (codeElement) {
+                    content = codeElement.textContent || '';
+                    console.log('Got content from code element:', content.substring(0, 100));
+                }
+            }
+            
+            const fileNameInput = document.getElementById('file-name');
+            const fileContentInput = document.getElementById('file-content');
+            
+            if (fileNameInput && fileContentInput) {
+                fileNameInput.value = editingFilename;
+                fileContentInput.value = content;
+                modal.classList.remove('hidden');
+                console.log('Modal opened successfully');
+            } else {
+                console.error('Could not find form inputs');
+            }
+        });
+    });
+
+    document.querySelectorAll('.delete-file-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const filename = btn.dataset.filename;
+            console.log('Delete button clicked for:', filename);
+            
+            if (confirm(`Are you sure you want to delete ${filename}?`)) {
+                try {
+                    const response = await fetch(`/api/contexts/{{ context.id }}/files/${filename}`, {
+                        method: 'DELETE'
+                    });
+                    if (response.ok) {
+                        console.log('File deleted successfully');
+                        location.reload();
+                    } else {
+                        console.error('Delete failed with status:', response.status);
+                        alert('Error deleting file');
+                    }
+                } catch (error) {
+                    console.error('Error deleting file:', error);
+                    alert('Error deleting file');
+                }
+            }
+        });
+    });
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        console.log('Form submitted');
+        
+        const formData = new FormData(e.target);
+        const data = {
+            name: formData.get('name'),
+            file_type: 'custom',
+            content: formData.get('content')
+        };
+        
+        try {
+            let response;
+            if (isEditing) {
+                console.log('Updating file:', editingFilename);
+                response = await fetch(`/api/contexts/{{ context.id }}/files/${editingFilename}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: data.content })
+                });
+            } else {
+                console.log('Creating new file:', data.name);
+                response = await fetch(`/api/contexts/{{ context.id }}/files`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+            }
+            
+            if (response.ok) {
+                console.log('File saved successfully');
+                location.reload();
+            } else {
+                const error = await response.json();
+                console.error('Save failed:', error);
+                alert(`Error: ${error.detail}`);
+            }
+        } catch (error) {
+            console.error('Error saving file:', error);
+            alert('Error saving file');
+        }
+    });
+}
+
+// Render markdown content
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, checking for markdown elements...');
+    
+    // Check if marked is available
+    if (typeof marked === 'undefined') {
+        console.error('Marked.js not loaded');
+        return;
+    }
+    
+    // Configure marked for better rendering
+    try {
+        marked.setOptions({
+            highlight: function(code, lang) {
+                if (typeof Prism !== 'undefined' && Prism.languages[lang]) {
+                    return Prism.highlight(code, Prism.languages[lang], lang);
+                }
+                return code;
+            },
+            breaks: true,
+            gfm: true
+        });
+    } catch (e) {
+        console.error('Error configuring marked:', e);
+    }
+    
+    // Render all markdown content
+    const markdownElements = document.querySelectorAll('.markdown-rendered');
+    console.log('Found', markdownElements.length, 'markdown elements');
+    
+    markdownElements.forEach(function(element) {
+        const content = element.getAttribute('data-content');
+        console.log('Processing markdown content:', content ? content.substring(0, 100) + '...' : 'empty');
+        
+        if (content) {
+            try {
+                // Use marked() instead of marked.parse() for older versions
+                element.innerHTML = marked(content);
+                console.log('Successfully rendered markdown');
+                
+                // Hide fallback content if it exists
+                const fallback = element.querySelector('.fallback-content');
+                if (fallback) {
+                    fallback.style.display = 'none';
+                }
+            } catch (e) {
+                console.error('Error rendering markdown:', e);
+                // Show fallback content on error
+                const fallback = element.querySelector('.fallback-content');
+                if (fallback) {
+                    fallback.style.display = 'block';
+                } else {
+                    element.innerHTML = '<pre>' + content + '</pre>';
+                }
+            }
+        }
+    });
+    
+    // Re-highlight code blocks after markdown rendering
+    if (typeof Prism !== 'undefined') {
+        Prism.highlightAll();
+    }
+});
+{% endif %}
+</script>
+
+<style>
+.file-type-badge {
+    @apply bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded;
+}
+
+/* Enhanced markdown styling */
+.markdown-content {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+}
+
+.markdown-content h1 {
+    @apply text-2xl font-bold mt-6 mb-4 text-gray-900 border-b border-gray-200 pb-2;
+}
+
+.markdown-content h2 {
+    @apply text-xl font-bold mt-5 mb-3 text-gray-900;
+}
+
+.markdown-content h3 {
+    @apply text-lg font-semibold mt-4 mb-2 text-gray-800;
+}
+
+.markdown-content p {
+    @apply mb-3 text-gray-700 leading-relaxed;
+}
+
+.markdown-content ul, .markdown-content ol {
+    @apply mb-3 ml-6;
+}
+
+.markdown-content li {
+    @apply mb-1 text-gray-700;
+}
+
+.markdown-content ul li {
+    @apply list-disc;
+}
+
+.markdown-content ol li {
+    @apply list-decimal;
+}
+
+.markdown-content strong {
+    @apply font-semibold text-gray-900;
+}
+
+.markdown-content em {
+    @apply italic;
+}
+
+.markdown-content a {
+    @apply text-blue-600 hover:text-blue-800 underline;
+}
+
+.markdown-content code {
+    @apply bg-gray-100 text-red-600 px-1 py-0.5 rounded text-sm font-mono;
+}
+
+.markdown-content pre {
+    @apply bg-gray-50 border rounded-lg p-4 overflow-x-auto mb-4;
+}
+
+.markdown-content pre code {
+    @apply bg-transparent text-gray-800 px-0 py-0;
+}
+
+.markdown-content blockquote {
+    @apply border-l-4 border-gray-300 pl-4 italic text-gray-600 my-4;
+}
+</style>
+{% endblock %}

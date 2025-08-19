@@ -1,0 +1,414 @@
+{% extends "base.html" %}
+
+{% block title %}Browse Repositories - Context Marketplace{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">Your Repositories</h1>
+        <p class="text-gray-600">Search and select from your GitHub repositories to generate LLM-ready contexts</p>
+    </div>
+    
+    <div class="bg-white card-shadow p-8">
+        <div id="loading-repos" class="text-center py-8">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+            <p class="mt-2 text-gray-600">Loading your GitHub repositories...</p>
+        </div>
+        
+        <div id="repository-search" class="hidden">
+            <div class="mb-6">
+                <label for="repository-input" class="block text-sm font-medium text-gray-700 mb-2">
+                    Search for Repository *
+                </label>
+                <div class="relative">
+                    <input
+                        type="text"
+                        id="repository-input"
+                        name="repository"
+                        required
+                        autocomplete="off"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Type to search your repositories..."
+                    >
+                    <div id="repository-dropdown" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg hidden max-h-60 overflow-y-auto">
+                        <!-- Search results will be populated here -->
+                    </div>
+                </div>
+                <p class="mt-1 text-xs text-gray-500">
+                    Search across all your accessible repositories (personal + organizations)
+                </p>
+            </div>
+            
+            <div id="repo-preview" class="hidden">
+                <div class="bg-gray-50 border rounded-lg p-6 mb-6">
+                    <div class="flex items-center gap-3 mb-4">
+                        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.30 3.297-1.30.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                        </svg>
+                        <div class="flex-1">
+                            <h3 id="repo-name" class="font-bold text-lg"></h3>
+                            <p id="repo-description" class="text-sm text-gray-600"></p>
+                            <div id="repo-languages" class="flex gap-2 mt-2"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-3">
+                        <button
+                            id="action-button"
+                            class="flex-1 btn-github"
+                            style="display: none;"
+                        >
+                            Generate Context
+                        </button>
+                        <a
+                            id="github-link"
+                            href="#"
+                            target="_blank"
+                            class="flex-1 text-center bg-gray-200 text-gray-800 px-6 py-3 font-bold border-[3px] border-gray-900 shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
+                        >
+                            View on GitHub
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let repositories = [];
+let selectedRepo = null;
+let filteredRepos = [];
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadRepositories();
+});
+
+async function loadRepositories() {
+    try {
+        const response = await fetch('/api/user/repositories-with-contexts');
+        if (response.ok) {
+            repositories = await response.json();
+            console.log(`Loaded ${repositories.length} repositories`);
+            setupSearch();
+        } else {
+            showError('Failed to load repositories. Please try again.');
+        }
+    } catch (error) {
+        console.error('Error loading repositories:', error);
+        showError('Error loading repositories. Please check your connection.');
+    }
+}
+
+function setupSearch() {
+    const loadingDiv = document.getElementById('loading-repos');
+    const searchDiv = document.getElementById('repository-search');
+    const input = document.getElementById('repository-input');
+    const dropdown = document.getElementById('repository-dropdown');
+    
+    loadingDiv.classList.add('hidden');
+    searchDiv.classList.remove('hidden');
+    
+    // Setup search functionality
+    let searchTimeout;
+    input.addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            const query = e.target.value.trim();
+            if (query.length >= 1) {
+                performSearch(query);
+            } else {
+                dropdown.classList.add('hidden');
+                hideRepositoryPreview();
+            }
+        }, 150); // Debounce search
+    });
+    
+    // Handle input focus
+    input.addEventListener('focus', () => {
+        if (input.value.trim().length >= 1) {
+            performSearch(input.value.trim());
+        }
+    });
+    
+    // Handle clicking outside
+    document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.add('hidden');
+        }
+    });
+    
+    // Handle keyboard navigation
+    input.addEventListener('keydown', (e) => {
+        const items = dropdown.querySelectorAll('.dropdown-item');
+        let currentIndex = Array.from(items).findIndex(item => item.classList.contains('highlighted'));
+        
+        switch(e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                if (currentIndex < items.length - 1) {
+                    if (currentIndex >= 0) items[currentIndex].classList.remove('highlighted');
+                    items[currentIndex + 1].classList.add('highlighted');
+                }
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                if (currentIndex > 0) {
+                    items[currentIndex].classList.remove('highlighted');
+                    items[currentIndex - 1].classList.add('highlighted');
+                }
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (currentIndex >= 0) {
+                    items[currentIndex].click();
+                } else if (items.length === 1) {
+                    items[0].click();
+                }
+                break;
+            case 'Escape':
+                dropdown.classList.add('hidden');
+                break;
+        }
+    });
+}
+
+function performSearch(query) {
+    const dropdown = document.getElementById('repository-dropdown');
+    
+    // Fuzzy search through repositories
+    filteredRepos = fuzzySearch(repositories, query);
+    
+    if (filteredRepos.length === 0) {
+        dropdown.innerHTML = `
+            <div class="p-3 text-gray-500 text-center">
+                No repositories found.
+            </div>
+        `;
+    } else {
+        dropdown.innerHTML = filteredRepos.map(repo => `
+            <div class="dropdown-item p-3 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                 data-repo="${JSON.stringify(repo).replace(/"/g, '&quot;')}">
+                <div class="flex items-center justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            <div class="font-medium">${highlightMatch(repo.full_name, query)}</div>
+                            ${repo.has_context ? 
+                                '<span class="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded">CONTEXT</span>' : ''
+                            }
+                            ${repo.owner_type === 'Organization' ? 
+                                '<span class="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded">ORG</span>' : 
+                                '<span class="bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded">USER</span>'
+                            }
+                            ${repo.fork ? '<span class="bg-yellow-100 text-yellow-700 text-xs px-2 py-0.5 rounded">FORK</span>' : ''}
+                        </div>
+                        <div class="text-sm text-gray-600 mt-1">${repo.description || 'No description'}</div>
+                        <div class="text-xs text-gray-500 mt-1">
+                            ${repo.language ? `${repo.language} • ` : ''}
+                            ${repo.private ? 'Private' : 'Public'} • 
+                            ⭐ ${repo.stargazers_count || 0}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        
+        // Add click handlers
+        dropdown.querySelectorAll('.dropdown-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const repo = JSON.parse(item.dataset.repo);
+                selectRepository(repo);
+            });
+        });
+    }
+    
+    dropdown.classList.remove('hidden');
+}
+
+function fuzzySearch(repos, query) {
+    const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 0);
+    
+    return repos
+        .map(repo => ({
+            ...repo,
+            score: calculateFuzzyScore(repo, searchTerms)
+        }))
+        .filter(repo => repo.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 20); // Limit results
+}
+
+function calculateFuzzyScore(repo, searchTerms) {
+    const fullName = repo.full_name.toLowerCase();
+    const description = (repo.description || '').toLowerCase();
+    const language = (repo.language || '').toLowerCase();
+    
+    let score = 0;
+    
+    for (const term of searchTerms) {
+        // Exact matches get highest score
+        if (fullName.includes(term)) {
+            score += term.length * 10;
+        }
+        
+        // Description matches
+        if (description.includes(term)) {
+            score += term.length * 3;
+        }
+        
+        // Language matches
+        if (language.includes(term)) {
+            score += term.length * 5;
+        }
+        
+        // Fuzzy matching (characters in order)
+        if (fuzzyMatch(fullName, term)) {
+            score += term.length * 2;
+        }
+    }
+    
+    // Boost score for recently updated repos
+    const daysSinceUpdate = (Date.now() - new Date(repo.updated_at)) / (1000 * 60 * 60 * 24);
+    if (daysSinceUpdate < 30) score += 5;
+    else if (daysSinceUpdate < 90) score += 3;
+    
+    // Boost score for repos that already have contexts
+    if (repo.has_context) score += 10;
+    
+    return score;
+}
+
+function fuzzyMatch(text, pattern) {
+    let patternIdx = 0;
+    for (let i = 0; i < text.length && patternIdx < pattern.length; i++) {
+        if (text[i] === pattern[patternIdx]) {
+            patternIdx++;
+        }
+    }
+    return patternIdx === pattern.length;
+}
+
+function highlightMatch(text, query) {
+    const regex = new RegExp(`(${query.split(' ').join('|')})`, 'gi');
+    return text.replace(regex, '<mark class="bg-yellow-200">$1</mark>');
+}
+
+function selectRepository(repo) {
+    selectedRepo = repo;
+    document.getElementById('repository-input').value = repo.full_name;
+    document.getElementById('repository-dropdown').classList.add('hidden');
+    showRepositoryPreview(repo);
+}
+
+function showRepositoryPreview(repo) {
+    document.getElementById('repo-name').textContent = repo.full_name;
+    document.getElementById('repo-description').textContent = repo.description || 'No description available';
+    document.getElementById('github-link').href = repo.html_url;
+    
+    // Show languages and metadata
+    const languagesDiv = document.getElementById('repo-languages');
+    languagesDiv.innerHTML = '';
+    
+    const badges = [];
+    if (repo.language) badges.push({text: repo.language, color: 'blue'});
+    if (repo.private) badges.push({text: 'Private', color: 'gray'});
+    else badges.push({text: 'Public', color: 'green'});
+    if (repo.owner_type === 'Organization') badges.push({text: 'Organization', color: 'blue'});
+    if (repo.fork) badges.push({text: 'Fork', color: 'yellow'});
+    if (repo.stargazers_count) badges.push({text: `⭐ ${repo.stargazers_count}`, color: 'indigo'});
+    
+    badges.forEach(badge => {
+        const badgeEl = document.createElement('span');
+        badgeEl.className = `bg-${badge.color}-100 text-${badge.color}-800 text-xs px-2 py-1 rounded`;
+        badgeEl.textContent = badge.text;
+        languagesDiv.appendChild(badgeEl);
+    });
+    
+    // Set up the action button based on context status
+    const actionButton = document.getElementById('action-button');
+    actionButton.style.display = 'block';
+    
+    if (repo.has_context) {
+        actionButton.textContent = 'View Context';
+        actionButton.className = 'flex-1 bg-green-500 text-white px-6 py-3 font-bold border-[3px] border-gray-900 shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all';
+        actionButton.onclick = () => {
+            window.location.href = `/contexts/${repo.context_id}`;
+        };
+    } else {
+        actionButton.textContent = 'Generate Context';
+        actionButton.className = 'flex-1 btn-github';
+        actionButton.onclick = () => generateContext(repo.id);
+    }
+    
+    document.getElementById('repo-preview').classList.remove('hidden');
+}
+
+function hideRepositoryPreview() {
+    selectedRepo = null;
+    document.getElementById('repo-preview').classList.add('hidden');
+}
+
+async function generateContext(repoId) {
+    const repo = repositories.find(r => r.id == repoId);
+    if (!repo) return;
+    
+    const button = document.getElementById('action-button');
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Generating...';
+    
+    try {
+        const response = await fetch('/api/contexts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                name: repo.full_name,
+                description: repo.description,
+                github_repo_url: repo.html_url,
+                is_public: true
+            })
+        });
+        
+        if (response.ok) {
+            const context = await response.json();
+            window.location.href = `/contexts/${context.id}`;
+        } else {
+            const error = await response.json();
+            alert(`Error: ${error.detail || 'Failed to generate context'}`);
+        }
+    } catch (error) {
+        console.error('Error generating context:', error);
+        alert('Error generating context. Please try again.');
+    } finally {
+        button.disabled = false;
+        button.textContent = originalText;
+    }
+}
+
+function showError(message) {
+    const loadingDiv = document.getElementById('loading-repos');
+    loadingDiv.innerHTML = `
+        <div class="text-center py-8">
+            <svg class="w-12 h-12 text-red-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.232 15.5c-.77.833.192 2.5 1.732 2.5z"></path>
+            </svg>
+            <p class="text-red-600 mb-4">${message}</p>
+            <button onclick="location.reload()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
+                Try Again
+            </button>
+        </div>
+    `;
+}
+</script>
+
+<style>
+.line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+</style>
+{% endblock %}

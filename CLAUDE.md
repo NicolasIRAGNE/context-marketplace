@@ -1,0 +1,1 @@
+ALWAYS include @.context/spec.md when generating code. If the user asks for something that doesn't match the spec, warn the user and either modify the spec or handle the request accordingly.

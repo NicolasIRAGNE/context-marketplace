@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - SECRET_KEY=${SECRET_KEY}
+      - APP_URL=${APP_URL:-http://localhost:8000}
+      - DEBUG=${DEBUG:-true}
+    volumes:
+      - ./app:/app/app
+      - ./templates:/app/templates
+      - ./static:/app/static
+      - contexts_data:/app/contexts
+    command: python -m app.main --host 0.0.0.0 --port 8000 --reload
+
+  mcp-server:
+    build: .
+    environment:
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - SECRET_KEY=${SECRET_KEY}
+      - APP_URL=${APP_URL:-http://localhost:8000}
+      - DEBUG=${DEBUG:-false}
+    volumes:
+      - ./app:/app/app
+      - ./templates:/app/templates
+      - ./static:/app/static
+      - contexts_data:/app/contexts
+    command: python -m app.main --mcp
+    depends_on:
+      - app
+
+volumes:
+  contexts_data:
